@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: ai-interior-design
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python start_server.py
+    plan: starter
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: FLASK_ENV
+        value: production
+      - key: PYTHON_VERSION
+        value: 3.11.9
+    healthCheckPath: /api/health
+
+databases:
+  - name: ai-interior-design-db
+    plan: starter
+    databaseName: interior_design
+    user: interior_design_user

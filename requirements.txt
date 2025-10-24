@@ -1,0 +1,20 @@
+Flask
+Flask-SQLAlchemy
+Flask-Cors
+Flask-Migrate
+Flask-Login
+SQLAlchemy
+psycopg2-binary
+bcrypt
+python-dotenv
+openai
+PyPDF2
+Pillow
+PyMuPDF  # Required for 'fitz' module
+pandas
+gunicorn
+waitress
+requests
+python-dateutil
+Werkzeug
+pytest

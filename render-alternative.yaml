@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: ai-interior-design
+    env: python
+    buildCommand: |
+      # Install Node.js
+      curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+      sudo apt-get install -y nodejs
+      
+      # Install Python dependencies
+      pip install -r requirements.txt
+      
+      # Install Node.js dependencies and build frontend
+      npm install
+      npm run build
+    startCommand: python start_server.py
+    plan: starter
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: FLASK_ENV
+        value: production
+      - key: PYTHON_VERSION
+        value: 3.11.9
+    healthCheckPath: /api/health
+
+databases:
+  - name: ai-interior-design-db
+    plan: starter
+    databaseName: interior_design
+    user: interior_design_user
