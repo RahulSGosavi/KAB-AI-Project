@@ -243,14 +243,14 @@ const AIFileAnalysis = ({ isOpen, onClose, projectFiles = [] }) => {
         let matchedRows = [];
 
         for (const r of sheet.rows) {
-          const rowText = r.cells.join(' ').toLowerCase();
+          const rowText = (r.cells || []).join(' ').toLowerCase();
           if (terms.some(t => rowText.includes(String(t)))) matchedRows.push({ row: r, rowText });
         }
 
         if (matchedRows.length === 0) {
           // looser fallback: keywords
           for (const r of sheet.rows) {
-            const rowText = r.cells.join(' ').toLowerCase();
+            const rowText = (r.cells || []).join(' ').toLowerCase();
             if ((q.includes('frosted') && rowText.includes('frosted')) ||
                 (q.includes('36') && rowText.includes('36')) ||
                 (q.includes('w1842') && rowText.includes('w1842')) ||
@@ -368,9 +368,9 @@ const AIFileAnalysis = ({ isOpen, onClose, projectFiles = [] }) => {
           if (!pf.sheets) continue;
           for (const sheet of pf.sheets) {
             // Prefer rows where SKU appears in cells
-            const candidates = sheet.rows.filter(r => r.cells.join(' ').toLowerCase().includes(sku));
+            const candidates = sheet.rows.filter(r => (r.cells || []).join(' ').toLowerCase().includes(sku));
             for (const r of candidates) {
-              const rowText = r.cells.join(' | ');
+              const rowText = (r.cells || []).join(' | ');
               // Try to find the material column index by header match
               const materialNames = ['prime maple', 'prime', 'maple', 'cherry', 'oak', 'walnut', 'elite'];
               let foundPrice = null;
@@ -391,8 +391,8 @@ const AIFileAnalysis = ({ isOpen, onClose, projectFiles = [] }) => {
               // If header-based fails, search entire row for material+number
               if (!foundPrice) {
                 for (const mat of materialNames) {
-                  if (r.cells.join(' ').toLowerCase().includes(mat)) {
-                    const numbers = extractNumbersFromRow(r.cells);
+                  if ((r.cells || []).join(' ').toLowerCase().includes(mat)) {
+                    const numbers = extractNumbersFromRow(r.cells || []);
                     if (numbers.length) { foundPrice = numbers[0]; break; }
                   }
                 }
@@ -414,7 +414,7 @@ const AIFileAnalysis = ({ isOpen, onClose, projectFiles = [] }) => {
           if (!pf.sheets) continue;
           for (const sheet of pf.sheets) {
             for (const r of sheet.rows) {
-              const rowText = r.cells.join(' ').toLowerCase();
+              const rowText = (r.cells || []).join(' ').toLowerCase();
               if (rowText.includes('frost') && (rowText.includes('36') || q.includes('36'))) {
                 const prices = extractNumbersFromRow(r.cells);
                 if (prices.length > 0) {
@@ -431,7 +431,7 @@ const AIFileAnalysis = ({ isOpen, onClose, projectFiles = [] }) => {
                   }
                   return `âœ… The list price per door for Frosted Glass (36") is $${Number(perDoor).toFixed(2)}.\n\nSource: ${pf.filename} â†’ ${sheet.name} â†’ Row ${r.rowIndex}\n\n${assumption}`;
                 } else {
-                  return `I found a Frosted Glass entry near 36" in ${pf.filename} â†’ ${sheet.name} â†’ Row ${r.rowIndex} but couldn't detect a numeric price in that row. Row content: "${r.cells.join(' | ')}"`;
+                  return `I found a Frosted Glass entry near 36" in ${pf.filename} â†’ ${sheet.name} â†’ Row ${r.rowIndex} but couldn't detect a numeric price in that row. Row content: "${(r.cells || []).join(' | ')}"`;
                 }
               }
             }
@@ -444,16 +444,16 @@ const AIFileAnalysis = ({ isOpen, onClose, projectFiles = [] }) => {
         if (!pf.sheets) continue;
         for (const sheet of pf.sheets) {
           for (const r of sheet.rows) {
-            const rowText = r.cells.join(' ').toLowerCase();
+            const rowText = (r.cells || []).join(' ').toLowerCase();
             if (terms.some(t => rowText.includes(String(t)))) {
               // If question asks for price, try to extract a numeric
               if (q.includes('price') || q.includes('$') || q.includes('list')) {
-                const nums = extractNumbersFromRow(r.cells);
+                const nums = extractNumbersFromRow(r.cells || []);
                 if (nums.length > 0) {
-                  return `âœ… Found a matching row. Price-like value detected: $${Number(nums[0]).toFixed(2)}.\n\nSource: ${pf.filename} â†’ ${sheet.name} â†’ Row ${r.rowIndex}\nRow: ${r.cells.join(' | ')}`;
+                  return `âœ… Found a matching row. Price-like value detected: $${Number(nums[0]).toFixed(2)}.\n\nSource: ${pf.filename} â†’ ${sheet.name} â†’ Row ${r.rowIndex}\nRow: ${(r.cells || []).join(' | ')}`;
                 }
               }
-              return `âœ… Found a matching row in ${pf.filename} â†’ ${sheet.name} â†’ Row ${r.rowIndex}.\n\nRow sample: ${r.cells.join(' | ')}\n\nIf you want a precise value, ask "What is the price in this row?" or "Show header names for this sheet."`;
+              return `âœ… Found a matching row in ${pf.filename} â†’ ${sheet.name} â†’ Row ${r.rowIndex}.\n\nRow sample: ${(r.cells || []).join(' | ')}\n\nIf you want a precise value, ask "What is the price in this row?" or "Show header names for this sheet."`;
             }
           }
         }

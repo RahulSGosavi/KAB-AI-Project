@@ -200,8 +200,8 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
           
           if (!skuRaw) {
             // Index the row under a special key if it contains option pricing data
-            if (sheet.originalName.includes('Option Pricing') && row.cells[1]?.trim()) {
-                const optionCode = row.cells[1].trim().toUpperCase();
+            if (sheet.originalName.includes('Option Pricing') && row.cells && row.cells[1] && row.cells[1].trim()) {
+                const optionCode = String(row.cells[1]).trim().toUpperCase();
                 if (!index.has(optionCode)) {
                     index.set(optionCode, []);
                 }
@@ -538,14 +538,14 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
       };
     }
 
-    const sku = skuMatch[1].trim();
+    const sku = skuMatch[1]?.trim();
     const allPrices = findPricesForSKU(sku);
 
     if (allPrices.length === 0) {
       // ... (SKU not found fallback remains the same) ...
       const index = dataIndexRef.current;
       const availableSKUs = index ? Array.from(index.keys()).slice(0, 30) : [];
-      const baseSku = sku.split(' ')[0].trim().toUpperCase();
+      const baseSku = sku ? sku.split(' ')[0].trim().toUpperCase() : '';
       const allSKUs = index ? Array.from(index.keys()) : [];
       const baseMatches = allSKUs.filter(s => s.startsWith(baseSku) && s.length > baseSku.length);
 
@@ -567,7 +567,7 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
     if (materialMatch) {
       const searchMaterial = materialMatch[1].toLowerCase();
       
-      let match = allPrices.find(p => p.material.toLowerCase().includes(searchMaterial));
+      let match = allPrices.find(p => p.material && p.material.toLowerCase().includes(searchMaterial));
 
       if (match) {
         return {
@@ -575,10 +575,10 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
           message: `✓ PRICING ANALYSIS\n\nThe price for **${match.sku}** in the **${match.material}** option is:\n\n**$${match.price.toFixed(2)}**\n\n📍 Source: ${match.source}`
         };
       } else {
-        const availableMaterials = [...new Set(allPrices.map(p => p.material))];
+        const availableMaterials = [...new Set(allPrices.map(p => p.material || '').filter(m => m.trim()))];
         return {
           success: false,
-          message: `Material related to "${searchMaterial}" not found for ${allPrices[0].sku}.\n\nAvailable materials:\n${availableMaterials.join('\n')}`
+          message: `Material related to "${searchMaterial}" not found for ${allPrices[0]?.sku || 'unknown SKU'}.\n\nAvailable materials:\n${availableMaterials.join('\n')}`
         };
       }
     }
