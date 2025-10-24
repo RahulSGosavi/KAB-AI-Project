@@ -10,6 +10,7 @@ import ProjectDetailEnhanced from './pages/ProjectDetailEnhanced';
 import AnnotationEditor from './pages/AnnotationEditor';
 import AIDesignAssistant from './pages/AIDesignAssistant';
 import AIFileAnalysis from './pages/AIFileAnalysis';
+import PricingAnalysis from './pages/PricingAnalysis';
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -109,6 +110,16 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <AIFileAnalysis />
+          </ProtectedRoute>
+        }
+      />
+      
+      {/* Pricing Analysis - Full Screen (No Navbar) */}
+      <Route
+        path="/project/:id/pricing"
+        element={
+          <ProtectedRoute>
+            <PricingAnalysis />
           </ProtectedRoute>
         }
       />

@@ -6,7 +6,6 @@ import { formatDate, formatFileSize, getFileIcon } from '../utils/helpers';
 import Modal from '../components/Modal';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Toast from '../components/Toast';
-import FileAnalysisChat from '../components/FileAnalysisChat';
 
 const ProjectDetail = () => {
   const { id } = useParams();
@@ -25,8 +24,6 @@ const ProjectDetail = () => {
   const [newMessage, setNewMessage] = useState('');
   const [loadingDiscussions, setLoadingDiscussions] = useState(false);
   
-  // Pricing Chat State
-  const [isPricingChatOpen, setIsPricingChatOpen] = useState(false);
   
 
   useEffect(() => {
@@ -286,7 +283,7 @@ const ProjectDetail = () => {
           </button>
 
           <button 
-            onClick={() => setIsPricingChatOpen(true)}
+            onClick={() => navigate(`/project/${id}/pricing`)}
             className="card hover:shadow-lg transition-shadow text-left group bg-gradient-to-r from-blue-500 to-purple-600 text-white"
           >
             <div className="flex items-center gap-4">
@@ -415,12 +412,6 @@ const ProjectDetail = () => {
         </form>
       </Modal>
 
-      {/* File Analysis Chat */}
-      <FileAnalysisChat
-        isOpen={isPricingChatOpen}
-        onClose={() => setIsPricingChatOpen(false)}
-        projectFiles={project?.files || []}
-      />
     </div>
   );
 };

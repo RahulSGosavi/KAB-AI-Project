@@ -81,7 +81,7 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
     setMessages([{
       id: generateId(),
       type: MESSAGE_TYPES.ASSISTANT,
-      content: 'Welcome to AI Pricing Analysis!\n\nI can analyze massive Excel files (50,000+ rows, 50 sheets) and PDFs (100+ pages).\n\nSelect your files below and ask me about SKU pricing, materials, and specifications.\n\nPro tip: Ask multiple questions at once!',
+      content: 'Welcome to AI Pricing Analysis!\n\nSelect your files below and ask me about SKU pricing, materials, and specifications.',
       timestamp: new Date()
     }]);
     setSelectedFiles([]);
