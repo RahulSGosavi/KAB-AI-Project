@@ -915,7 +915,32 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
         addMessage(`⚠️ No SKU data found. Check console (F12) for details.\n\nMake sure your Excel file has:\n- SKU codes in the first column\n- Price data in other columns`, MESSAGE_TYPES.ERROR);
         console.error('❌ No data indexed. Check file structure.');
       } else {
-        addMessage(`✅ Analysis complete! I've loaded ${index.size} SKUs.\n\nYou can now ask me questions. Try:\n- "What is the price of W1842?"\n- "Show me W3630 BUTT in Elite Cherry"`, MESSAGE_TYPES.SYSTEM);
+        // Show file breakdown
+        const fileBreakdown = allData.map(file => {
+          const fileName = file.filename || 'Unknown';
+          const fileSkus = [];
+          
+          if (file.sheets) {
+            file.sheets.forEach(sheet => {
+              if (sheet.rows) {
+                sheet.rows.forEach(row => {
+                  if (row.cells && row.cells[0]) {
+                    const sku = String(row.cells[0]).trim().toUpperCase();
+                    if (sku && sku.length >= 2) {
+                      fileSkus.push(sku);
+                    }
+                  }
+                });
+              }
+            });
+          }
+          
+          return `• ${fileName}: ${fileSkus.length} SKUs found`;
+        }).join('\n');
+        
+        const sampleSKUs = Array.from(index.keys()).slice(0, 10).join(', ');
+        
+        addMessage(`✅ Analysis complete! I've loaded ${index.size} SKUs.\n\n📊 File Breakdown:\n${fileBreakdown}\n\n📋 Sample SKUs: ${sampleSKUs}\n\nYou can now ask me questions. Try:\n- "What is the price of W1842?"\n- "Show me W3630 BUTT in Elite Cherry"`, MESSAGE_TYPES.SYSTEM);
       }
       
       setStatus(STATUS.IDLE);
