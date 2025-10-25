@@ -79,12 +79,7 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
   }, [messages]);
 
   const initializeChat = useCallback(() => {
-    setMessages([{
-      id: generateId(),
-      type: MESSAGE_TYPES.ASSISTANT,
-      content: 'Welcome to AI Pricing Analysis!\n\nI can analyze massive Excel files (50,000+ rows, 50 sheets) and PDFs (100+ pages).\n\nSelect your files below and ask me about SKU pricing, materials, and specifications.\n\nPro tip: Ask multiple questions at once!',
-      timestamp: new Date()
-    }]);
+    setMessages([]); // No welcome message on file selection screen
     setSelectedFiles([]);
     setShowSelector(true);
     setParsedCache({});
@@ -95,7 +90,11 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
 
   const scrollToBottom = useCallback(() => {
     if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+      // Smooth scroll to bottom
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
     }
   }, []);
 
@@ -840,13 +839,15 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
 
   const startAnalysis = useCallback(async () => {
     if (selectedFiles.length === 0) {
-      addMessage('Please select at least one file.', MESSAGE_TYPES.SYSTEM);
-      return;
+      return; // Silently return - no message
     }
     
-    addMessage(`🔄 Loading ${selectedFiles.length} file(s) into memory...`, MESSAGE_TYPES.SYSTEM);
+    // Hide file selector and show chat
     setShowSelector(false);
     setStatus(STATUS.PARSING);
+    
+    // Add welcome message when chat starts
+    addMessage('👋 Hello! I\'m your AI Pricing Assistant.\n\nI\'m analyzing your files now. Once ready, you can ask me anything about SKU pricing, materials, and specifications!', MESSAGE_TYPES.ASSISTANT);
     
     try {
       let allData = [];
@@ -877,7 +878,7 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
         addMessage(`⚠️ No SKU data found. Check console (F12) for details.\n\nMake sure your Excel file has:\n- SKU codes in the first column\n- Price data in other columns`, MESSAGE_TYPES.ERROR);
         console.error('❌ No data indexed. Check file structure.');
       } else {
-        addMessage(`✅ Ready! Loaded ${index.size} SKUs from your files.\n\nYou can now ask questions like:\n- "What is the price of W1842?"\n- "What is W3630 BUTT in Elite Cherry?"`, MESSAGE_TYPES.SYSTEM);
+        addMessage(`✅ Analysis complete! I've loaded ${index.size} SKUs.\n\nYou can now ask me questions. Try:\n- "What is the price of W1842?"\n- "Show me W3630 BUTT in Elite Cherry"`, MESSAGE_TYPES.SYSTEM);
       }
       
       setStatus(STATUS.IDLE);
@@ -903,61 +904,61 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 bg-opacity-95 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-gradient-to-br from-white/95 to-blue-50/95 backdrop-blur-xl rounded-3xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col border border-white/20 relative overflow-hidden">
+    <div className="fixed inset-0 bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 bg-opacity-95 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm">
+      <div className="bg-gradient-to-br from-white/95 to-blue-50/95 backdrop-blur-xl rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-full sm:max-w-6xl h-[100vh] sm:h-[90vh] flex flex-col border border-white/20 relative overflow-hidden">
         {/* Animated Background Elements */}
-        <div className="absolute top-0 left-0 w-96 h-96 bg-gradient-to-br from-blue-400/20 to-purple-400/20 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute bottom-0 right-0 w-96 h-96 bg-gradient-to-tl from-indigo-400/20 to-pink-400/20 rounded-full blur-3xl animate-pulse" style={{animationDelay: '1s'}}></div>
+        <div className="absolute top-0 left-0 w-48 h-48 sm:w-96 sm:h-96 bg-gradient-to-br from-blue-400/20 to-purple-400/20 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute bottom-0 right-0 w-48 h-48 sm:w-96 sm:h-96 bg-gradient-to-tl from-indigo-400/20 to-pink-400/20 rounded-full blur-3xl animate-pulse" style={{animationDelay: '1s'}}></div>
         
-        {/* Header with 3D Effect */}
-        <div className="relative flex items-center justify-between p-6 border-b border-white/20 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 shadow-lg">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center transform hover:scale-110 transition-transform duration-300 shadow-xl">
-              <svg className="w-8 h-8 text-white drop-shadow-lg" fill="currentColor" viewBox="0 0 20 20">
+        {/* Header with 3D Effect - Responsive */}
+        <div className="relative flex items-center justify-between p-3 sm:p-4 md:p-6 border-b border-white/20 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 shadow-lg">
+          <div className="flex items-center gap-2 sm:gap-3 md:gap-4 flex-1 min-w-0">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 bg-white/20 backdrop-blur-md rounded-xl sm:rounded-2xl flex items-center justify-center transform hover:scale-110 transition-transform duration-300 shadow-xl flex-shrink-0">
+              <svg className="w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8 text-white drop-shadow-lg" fill="currentColor" viewBox="0 0 20 20">
                 <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
                 <path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd"/>
               </svg>
             </div>
-            <div>
-              <h2 className="text-2xl font-bold text-white drop-shadow-lg">🤖 AI Pricing Assistant</h2>
-              <p className="text-sm text-blue-100 drop-shadow">Powered by Advanced Intelligence</p>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-sm sm:text-lg md:text-xl lg:text-2xl font-bold text-white drop-shadow-lg truncate">🤖 AI Pricing Assistant</h2>
+              <p className="text-xs sm:text-sm text-blue-100 drop-shadow hidden sm:block">Powered by Advanced Intelligence</p>
             </div>
           </div>
           <button 
             onClick={onClose} 
-            className="text-white hover:bg-white/20 rounded-xl p-3 transition-all duration-300 transform hover:scale-110 hover:rotate-90 backdrop-blur-md"
+            className="text-white hover:bg-white/20 rounded-lg sm:rounded-xl p-2 sm:p-3 transition-all duration-300 transform hover:scale-110 hover:rotate-90 backdrop-blur-md flex-shrink-0"
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
             </svg>
           </button>
         </div>
 
         {showSelector && (
-          <div className="relative p-8 border-b border-white/20 bg-gradient-to-br from-blue-50/50 to-purple-50/50 backdrop-blur-sm">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg transform hover:scale-110 transition-transform">
-                <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+          <div className="relative p-3 sm:p-4 md:p-6 lg:p-8 border-b border-white/20 bg-gradient-to-br from-blue-50/50 to-purple-50/50 backdrop-blur-sm">
+            <div className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-6">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg sm:rounded-xl flex items-center justify-center shadow-lg transform hover:scale-110 transition-transform flex-shrink-0">
+                <svg className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
                   <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
                 </svg>
               </div>
-              <h3 className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">📁 Select Your Files</h3>
+              <h3 className="text-base sm:text-lg md:text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">📁 Select Your Files</h3>
             </div>
 
-            <div className="space-y-3 max-h-64 overflow-y-auto mb-6 pr-2 custom-scrollbar">
+            <div className="space-y-2 sm:space-y-3 max-h-48 sm:max-h-64 overflow-y-auto mb-4 sm:mb-6 pr-1 sm:pr-2 custom-scrollbar">
               {projectFiles.length === 0 ? (
-                <div className="text-center py-12 px-6 bg-white/60 backdrop-blur-sm rounded-2xl border-2 border-dashed border-indigo-300 shadow-inner">
-                  <svg className="w-16 h-16 mx-auto text-indigo-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="text-center py-8 sm:py-12 px-4 sm:px-6 bg-white/60 backdrop-blur-sm rounded-xl sm:rounded-2xl border-2 border-dashed border-indigo-300 shadow-inner">
+                  <svg className="w-12 h-12 sm:w-16 sm:h-16 mx-auto text-indigo-300 mb-3 sm:mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
                   </svg>
-                  <p className="text-gray-500 font-medium">No files available</p>
-                  <p className="text-sm text-gray-400 mt-2">Upload Excel or PDF files first</p>
+                  <p className="text-gray-500 font-medium text-sm sm:text-base">No files available</p>
+                  <p className="text-xs sm:text-sm text-gray-400 mt-1 sm:mt-2">Upload Excel or PDF files first</p>
                 </div>
               ) : (
                 projectFiles.map(file => (
                   <label
                     key={file.id}
-                    className={`group flex items-center gap-4 p-4 rounded-2xl cursor-pointer transition-all duration-300 transform hover:scale-[1.02] hover:shadow-lg ${
+                    className={`group flex items-center gap-2 sm:gap-3 md:gap-4 p-3 sm:p-4 rounded-xl sm:rounded-2xl cursor-pointer transition-all duration-300 transform hover:scale-[1.01] sm:hover:scale-[1.02] hover:shadow-lg ${
                       selectedFiles.some(f => f.id === file.id)
                         ? 'bg-gradient-to-r from-indigo-500 to-purple-600 shadow-xl scale-[1.01]'
                         : 'bg-white/80 backdrop-blur-sm border-2 border-gray-200 hover:border-indigo-300'
@@ -967,18 +968,18 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
                       type="checkbox"
                       checked={selectedFiles.some(f => f.id === file.id)}
                       onChange={() => toggleFileSelection(file)}
-                      className="w-6 h-6 text-indigo-600 rounded-lg focus:ring-2 focus:ring-indigo-500 transition-transform group-hover:scale-110"
+                      className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-600 rounded-md sm:rounded-lg focus:ring-2 focus:ring-indigo-500 transition-transform group-hover:scale-110 flex-shrink-0"
                     />
-                    <div className="flex-1">
-                      <p className={`font-semibold ${selectedFiles.some(f => f.id === file.id) ? 'text-white' : 'text-gray-800'}`}>
+                    <div className="flex-1 min-w-0">
+                      <p className={`font-semibold text-sm sm:text-base truncate ${selectedFiles.some(f => f.id === file.id) ? 'text-white' : 'text-gray-800'}`}>
                         {file.name || file.filename}
                       </p>
-                      <p className={`text-xs mt-1 ${selectedFiles.some(f => f.id === file.id) ? 'text-blue-100' : 'text-gray-500'}`}>
+                      <p className={`text-xs mt-0.5 sm:mt-1 ${selectedFiles.some(f => f.id === file.id) ? 'text-blue-100' : 'text-gray-500'}`}>
                         {file.size ? `📊 ${(file.size / 1024).toFixed(1)} KB` : '📄 File'}
                       </p>
                     </div>
                     {selectedFiles.some(f => f.id === file.id) && (
-                      <svg className="w-6 h-6 text-white animate-bounce" fill="currentColor" viewBox="0 0 20 20">
+                      <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white animate-bounce flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
                       </svg>
                     )}
@@ -990,23 +991,23 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
             <button
               onClick={startAnalysis}
               disabled={selectedFiles.length === 0}
-              className="w-full py-4 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white rounded-2xl font-bold text-lg hover:shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-[1.02] disabled:hover:scale-100 flex items-center justify-center gap-3 group relative overflow-hidden"
+              className="w-full py-3 sm:py-4 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white rounded-xl sm:rounded-2xl font-bold text-sm sm:text-base md:text-lg hover:shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-[1.02] disabled:hover:scale-100 flex items-center justify-center gap-2 sm:gap-3 group relative overflow-hidden"
             >
               <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 transform -skew-x-12 group-hover:translate-x-full transition-transform duration-1000"></div>
-              <svg className="w-6 h-6 group-hover:animate-pulse relative z-10" fill="currentColor" viewBox="0 0 20 20">
+              <svg className="w-5 h-5 sm:w-6 sm:h-6 group-hover:animate-pulse relative z-10" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"/>
               </svg>
               <span className="relative z-10">
-                🚀 Start Analysis {selectedFiles.length > 0 && `(${selectedFiles.length} file${selectedFiles.length !== 1 ? 's' : ''})`}
+                🚀 Start Analysis {selectedFiles.length > 0 && `(${selectedFiles.length})`}
               </span>
             </button>
           </div>
         )}
 
-        <div ref={chatContainerRef} className="relative flex-1 overflow-y-auto p-8 space-y-6 bg-gradient-to-br from-gray-50/50 to-blue-50/50 backdrop-blur-sm custom-scrollbar">
+        <div ref={chatContainerRef} className="relative flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 lg:p-8 space-y-3 sm:space-y-4 md:space-y-6 bg-gradient-to-br from-gray-50/50 to-blue-50/50 backdrop-blur-sm custom-scrollbar">
           {messages.map(msg => (
             <div key={msg.id} className={`flex ${msg.type === MESSAGE_TYPES.USER ? 'justify-end' : 'justify-start'} animate-fadeIn`}>
-              <div className={`max-w-[85%] rounded-3xl p-6 shadow-xl backdrop-blur-md transform transition-all duration-300 hover:scale-[1.02] ${
+              <div className={`max-w-[95%] sm:max-w-[90%] md:max-w-[85%] rounded-2xl sm:rounded-3xl p-3 sm:p-4 md:p-6 shadow-lg sm:shadow-xl backdrop-blur-md transform transition-all duration-300 hover:scale-[1.01] sm:hover:scale-[1.02] ${
                 msg.type === MESSAGE_TYPES.USER
                   ? 'bg-gradient-to-br from-indigo-600 to-purple-600 text-white shadow-indigo-500/50'
                   : msg.type === MESSAGE_TYPES.ERROR
@@ -1015,24 +1016,24 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
                   ? 'bg-gradient-to-br from-yellow-50 to-orange-50 text-yellow-900 border-2 border-yellow-200 shadow-yellow-200/50'
                   : 'bg-white/90 text-gray-800 border-2 border-gray-100 shadow-gray-200/50'
               }`}>
-                <div className="flex items-start gap-3">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                <div className="flex items-start gap-2 sm:gap-3">
+                  <div className={`w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                     msg.type === MESSAGE_TYPES.USER ? 'bg-white/20' : 'bg-gradient-to-br from-indigo-500 to-purple-600'
                   }`}>
                     {msg.type === MESSAGE_TYPES.USER ? (
-                      <span className="text-lg">👤</span>
+                      <span className="text-sm sm:text-base md:text-lg">👤</span>
                     ) : msg.type === MESSAGE_TYPES.ERROR ? (
-                      <span className="text-lg">⚠️</span>
+                      <span className="text-sm sm:text-base md:text-lg">⚠️</span>
                     ) : msg.type === MESSAGE_TYPES.SYSTEM ? (
-                      <span className="text-lg">ℹ️</span>
+                      <span className="text-sm sm:text-base md:text-lg">ℹ️</span>
                     ) : (
-                      <span className="text-lg">🤖</span>
+                      <span className="text-sm sm:text-base md:text-lg">🤖</span>
                     )}
                   </div>
-                  <div className="flex-1">
-                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
-                    <p className={`text-xs mt-3 flex items-center gap-1 ${msg.type === MESSAGE_TYPES.USER ? 'text-white/70' : 'text-gray-500'}`}>
-                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.content}</p>
+                    <p className={`text-[10px] sm:text-xs mt-2 sm:mt-3 flex items-center gap-1 ${msg.type === MESSAGE_TYPES.USER ? 'text-white/70' : 'text-gray-500'}`}>
+                      <svg className="w-2.5 h-2.5 sm:w-3 sm:h-3" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd"/>
                       </svg>
                       {msg.timestamp.toLocaleTimeString()}
@@ -1045,14 +1046,14 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
 
           {isLoading && (
             <div className="flex justify-start animate-fadeIn">
-              <div className="bg-white/90 backdrop-blur-md rounded-3xl p-6 shadow-xl border-2 border-gray-100">
-                <div className="flex items-center gap-4">
-                  <div className="flex gap-2">
-                    <div className="w-3 h-3 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-full animate-bounce"/>
-                    <div className="w-3 h-3 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full animate-bounce" style={{animationDelay: '0.15s'}}/>
-                    <div className="w-3 h-3 bg-gradient-to-r from-pink-600 to-red-600 rounded-full animate-bounce" style={{animationDelay: '0.3s'}}/>
+              <div className="bg-white/90 backdrop-blur-md rounded-2xl sm:rounded-3xl p-4 sm:p-5 md:p-6 shadow-lg sm:shadow-xl border-2 border-gray-100">
+                <div className="flex items-center gap-3 sm:gap-4">
+                  <div className="flex gap-1.5 sm:gap-2">
+                    <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-full animate-bounce"/>
+                    <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full animate-bounce" style={{animationDelay: '0.15s'}}/>
+                    <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-gradient-to-r from-pink-600 to-red-600 rounded-full animate-bounce" style={{animationDelay: '0.3s'}}/>
                   </div>
-                  <span className="text-sm text-gray-700 font-medium">
+                  <span className="text-xs sm:text-sm text-gray-700 font-medium">
                     {status === STATUS.PARSING && '📄 Parsing files...'}
                     {status === STATUS.INDEXING && '🔨 Building index...'}
                     {status === STATUS.PROCESSING && '🧠 Thinking...'}
@@ -1065,35 +1066,36 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
         </div>
 
         {!showSelector && (
-          <div className="relative p-6 border-t border-white/20 bg-gradient-to-br from-white/80 to-blue-50/80 backdrop-blur-xl">
-            <div className="flex gap-4 items-end">
+          <div className="relative p-3 sm:p-4 md:p-5 lg:p-6 border-t border-white/20 bg-gradient-to-br from-white/80 to-blue-50/80 backdrop-blur-xl">
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 md:gap-4 items-stretch sm:items-end">
               <div className="flex-1 relative group">
-                <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-2xl blur opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
+                <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl sm:rounded-2xl blur opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
                 <input
                   type="text"
                   value={inputMessage}
                   onChange={(e) => setInputMessage(e.target.value)}
                   onKeyPress={handleKeyPress}
-                  placeholder="💬 Ask me anything... (e.g., 'What is the price of W3630 BUTT in Elite Cherry?')"
+                  placeholder="💬 Ask me anything..."
                   disabled={isLoading}
-                  className="relative w-full px-6 py-4 border-2 border-gray-200 rounded-2xl bg-white/90 backdrop-blur-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/50 focus:border-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 text-sm font-medium placeholder-gray-400 shadow-lg hover:shadow-xl"
+                  className="relative w-full px-4 sm:px-5 md:px-6 py-3 sm:py-3.5 md:py-4 border-2 border-gray-200 rounded-xl sm:rounded-2xl bg-white/90 backdrop-blur-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/50 focus:border-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 text-xs sm:text-sm font-medium placeholder-gray-400 shadow-lg hover:shadow-xl"
                 />
               </div>
               <button
                 onClick={handleSendMessage}
                 disabled={isLoading || !inputMessage.trim()}
-                className="group relative px-8 py-4 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white rounded-2xl font-bold hover:shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 disabled:hover:scale-100 flex items-center gap-3 overflow-hidden"
+                className="group relative px-6 sm:px-7 md:px-8 py-3 sm:py-3.5 md:py-4 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white rounded-xl sm:rounded-2xl font-bold text-sm sm:text-base hover:shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 disabled:hover:scale-100 flex items-center justify-center gap-2 sm:gap-3 overflow-hidden min-h-[48px] sm:min-h-0"
               >
                 <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 transform -skew-x-12 group-hover:translate-x-full transition-transform duration-700"></div>
-                <svg className="w-6 h-6 relative z-10 group-hover:rotate-45 transition-transform duration-300" fill="currentColor" viewBox="0 0 20 20">
+                <svg className="w-5 h-5 sm:w-5 sm:h-5 md:w-6 md:h-6 relative z-10 group-hover:rotate-45 transition-transform duration-300" fill="currentColor" viewBox="0 0 20 20">
                   <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/>
                 </svg>
                 <span className="relative z-10">Send</span>
               </button>
             </div>
-            <p className="text-xs text-gray-500 mt-3 text-center flex items-center justify-center gap-2">
+            <p className="text-[10px] sm:text-xs text-gray-500 mt-2 sm:mt-3 text-center flex items-center justify-center gap-1 sm:gap-2">
               <span>💡</span>
-              <span>Pro tip: Press <kbd className="px-2 py-1 bg-gray-200 rounded text-xs font-mono">Enter</kbd> to send</span>
+              <span className="hidden sm:inline">Pro tip: Press <kbd className="px-1.5 sm:px-2 py-0.5 sm:py-1 bg-gray-200 rounded text-[10px] sm:text-xs font-mono">Enter</kbd> to send</span>
+              <span className="sm:hidden">Tap Enter to send</span>
             </p>
           </div>
         )}
