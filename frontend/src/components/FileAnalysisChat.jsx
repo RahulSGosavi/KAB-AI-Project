@@ -390,33 +390,49 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
     const name = file.name || file.filename || 'unknown';
     const ext = name.split('.').pop().toLowerCase();
 
+    console.log(`📄 Parsing file: ${name}, extension: ${ext}`);
     setProgress(0);
 
     let buffer;
-    if (file.url) {
-      const resp = await fetch(file.url);
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      buffer = await resp.arrayBuffer();
-    } else if (file.file_path) {
-      const resp = await fetch(`/static/uploads/${file.file_path}`);
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      buffer = await resp.arrayBuffer();
-    } else if (file instanceof File || file instanceof Blob) {
-      buffer = await file.arrayBuffer();
-    } else {
-      throw new Error('Unsupported file type');
-    }
+    try {
+      if (file.url) {
+        console.log(`Fetching from URL: ${file.url}`);
+        const resp = await fetch(file.url);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        buffer = await resp.arrayBuffer();
+      } else if (file.file_path) {
+        const filePath = `/static/uploads/${file.file_path}`;
+        console.log(`Fetching from file_path: ${filePath}`);
+        const resp = await fetch(filePath);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${filePath}`);
+        buffer = await resp.arrayBuffer();
+      } else if (file instanceof File || file instanceof Blob) {
+        console.log(`Reading File/Blob directly`);
+        buffer = await file.arrayBuffer();
+      } else {
+        console.error('Unsupported file object:', file);
+        throw new Error('Unsupported file type - file must have url, file_path, or be a File/Blob');
+      }
 
-    if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
-      return await parseExcelFile(buffer, name);
-    } else if (ext === 'pdf') {
-      return await parsePdfFile(buffer, name);
-    } else {
-      return {
-        filename: name,
-        text: new TextDecoder().decode(buffer),
-        isText: true
-      };
+      console.log(`Buffer size: ${buffer.byteLength} bytes`);
+
+      if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
+        console.log(`Parsing as Excel/CSV file`);
+        return await parseExcelFile(buffer, name);
+      } else if (ext === 'pdf') {
+        console.log(`Parsing as PDF file`);
+        return await parsePdfFile(buffer, name);
+      } else {
+        console.log(`Parsing as text file`);
+        return {
+          filename: name,
+          text: new TextDecoder().decode(buffer),
+          isText: true
+        };
+      }
+    } catch (error) {
+      console.error(`Error parsing file ${name}:`, error);
+      throw new Error(`Failed to parse ${name}: ${error.message}`);
     }
   }, [parseExcelFile, parsePdfFile]);
   
@@ -680,8 +696,14 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
 
 
   const handleSendMessage = useCallback(async () => {
-    if (!inputMessage.trim() || selectedFiles.length === 0) {
-      addMessage('Please select files and enter a question.', MESSAGE_TYPES.SYSTEM);
+    if (!inputMessage.trim()) {
+      addMessage('Please enter a question.', MESSAGE_TYPES.SYSTEM);
+      return;
+    }
+
+    // Check if data is indexed
+    if (!dataIndexRef.current || dataIndexRef.current.size === 0) {
+      addMessage('❌ No data indexed yet. Please ensure files were successfully parsed.', MESSAGE_TYPES.ERROR);
       return;
     }
 
@@ -691,24 +713,6 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
     setStatus(STATUS.PROCESSING);
 
     try {
-      let parsedFiles = [];
-      for (const file of selectedFiles) {
-        const cacheKey = file.name || file.filename || JSON.stringify(file);
-
-        if (parsedCache[cacheKey]) {
-          console.log(`Using cached file: ${cacheKey}`);
-          parsedFiles.push(parsedCache[cacheKey]);
-        } else {
-          setStatus(STATUS.PARSING);
-          const parsed = await parseFile(file);
-          parsedFiles.push(parsed);
-          setParsedCache(prev => ({ ...prev, [cacheKey]: parsed }));
-        }
-      }
-
-      setStatus(STATUS.INDEXING);
-      dataIndexRef.current = buildDataIndex(parsedFiles);
-
       const questions = splitQuestions(userMsg);
       
       if (questions.length > 1) {
@@ -738,7 +742,7 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
     }
 
     setProgress(0);
-  }, [inputMessage, selectedFiles, parsedCache, parseFile, buildDataIndex, processQuestion, addMessage, splitQuestions]);
+  }, [inputMessage, processQuestion, addMessage, splitQuestions]);
 
   const toggleFileSelection = useCallback((file) => {
     setSelectedFiles(prev =>
@@ -748,13 +752,52 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
     );
   }, []);
 
-  const startAnalysis = useCallback(() => {
+  const startAnalysis = useCallback(async () => {
     if (selectedFiles.length === 0) {
       addMessage('Please select at least one file.', MESSAGE_TYPES.SYSTEM);
       return;
     }
+    
+    // Pre-parse and index files when starting analysis
+    addMessage(`🔄 Starting analysis with ${selectedFiles.length} file(s). Please wait while I parse the data...`, MESSAGE_TYPES.SYSTEM);
     setShowSelector(false);
-  }, [selectedFiles, addMessage]);
+    setStatus(STATUS.PARSING);
+    
+    try {
+      let parsedFiles = [];
+      for (const file of selectedFiles) {
+        const cacheKey = file.name || file.filename || JSON.stringify(file);
+
+        if (parsedCache[cacheKey]) {
+          console.log(`Using cached file: ${cacheKey}`);
+          parsedFiles.push(parsedCache[cacheKey]);
+        } else {
+          const parsed = await parseFile(file);
+          parsedFiles.push(parsed);
+          setParsedCache(prev => ({ ...prev, [cacheKey]: parsed }));
+        }
+      }
+
+      setStatus(STATUS.INDEXING);
+      const index = buildDataIndex(parsedFiles);
+      dataIndexRef.current = index;
+      
+      const skuCount = index.size;
+      const totalEntries = Array.from(index.values()).flat().length;
+      
+      if (skuCount === 0) {
+        addMessage(`⚠️ Warning: No SKU data found in the files. Please ensure your files contain SKU codes in the first column.`, MESSAGE_TYPES.ERROR);
+      } else {
+        addMessage(`✅ Analysis ready! Indexed ${skuCount} unique SKUs with ${totalEntries} price entries. You can now ask questions.`, MESSAGE_TYPES.SYSTEM);
+      }
+      
+      setStatus(STATUS.IDLE);
+    } catch (err) {
+      console.error('Pre-indexing error:', err);
+      addMessage(`❌ Error preparing files: ${err.message}`, MESSAGE_TYPES.ERROR);
+      setStatus(STATUS.ERROR);
+    }
+  }, [selectedFiles, addMessage, parsedCache, parseFile, buildDataIndex]);
 
   const handleKeyPress = useCallback((e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
