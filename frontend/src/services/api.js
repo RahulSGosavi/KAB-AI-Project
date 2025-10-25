@@ -42,6 +42,9 @@ export const projectsAPI = {
     api.post(`/projects/${id}/upload`, formData, {
       headers: { "Content-Type": "multipart/form-data" },
     }),
+  // 💡 FIX: ADD THE MISSING FUNCTION
+  analyzeFiles: (file_ids, question) => 
+    api.post("/projects/analyze-files", { file_ids, question }),
 };
 
 // === Annotations API ===
