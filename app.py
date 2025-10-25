@@ -12,6 +12,10 @@ import io
 import csv
 # ------------------------------------------------
 
+# --- PDF DRAWING ANALYSIS ---
+from pdf_drawing_analyzer import PDFDrawingAnalyzer, analyze_pdf_drawing
+# ---------------------------
+
 # load .env
 load_dotenv()
 
@@ -1022,6 +1026,131 @@ def clear_data_store():
         return jsonify({
             'error': f"Failed to clear data store: {str(e)}"
         }), 500
+
+
+# ============================================
+# PDF DRAWING ANALYSIS ENDPOINTS
+# ============================================
+
+@app.route('/api/analyze/drawing', methods=['POST'])
+def analyze_drawing():
+    """
+    Intelligent PDF Drawing Analysis
+    Extracts SKUs, dimensions, locations from engineering drawings
+    """
+    try:
+        data = request.get_json()
+        file_path = data.get('file_path')
+        question = data.get('question', '')
+        
+        if not file_path:
+            return jsonify({'error': 'No file path provided'}), 400
+        
+        # Check if file exists and is a PDF
+        if not os.path.exists(file_path):
+            return jsonify({'error': 'File not found'}), 404
+        
+        if not file_path.lower().endswith('.pdf'):
+            return jsonify({'error': 'Only PDF files are supported for drawing analysis'}), 400
+        
+        # Analyze the drawing
+        analyzer = PDFDrawingAnalyzer(file_path)
+        analysis_result = analyzer.analyze()
+        
+        # If a question was asked, answer it
+        answer = None
+        if question:
+            answer = analyzer.answer_question(question)
+        
+        return jsonify({
+            'success': True,
+            'file_type': 'engineering_drawing',
+            'analysis': analysis_result,
+            'answer': answer,
+            'summary': analysis_result.get('summary', '')
+        })
+        
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': f'Drawing analysis failed: {str(e)}'
+        }), 500
+
+
+@app.route('/api/check-file-type', methods=['POST'])
+def check_file_type():
+    """
+    Check if a file is a pricing file or an engineering drawing
+    """
+    try:
+        data = request.get_json()
+        file_path = data.get('file_path')
+        
+        if not file_path or not os.path.exists(file_path):
+            return jsonify({'error': 'File not found'}), 404
+        
+        # Check PDF content
+        if file_path.lower().endswith('.pdf'):
+            try:
+                import fitz
+                doc = fitz.open(file_path)
+                text = ""
+                for page in doc[:2]:  # Check first 2 pages
+                    text += page.get_text()
+                doc.close()
+                
+                text_lower = text.lower()
+                
+                # Check for pricing indicators
+                pricing_indicators = ['price', 'cost', '$', 'material', 'finish', 'prime maple', 'elite cherry', 'list price']
+                has_pricing = sum(indicator in text_lower for indicator in pricing_indicators)
+                
+                # Check for drawing indicators
+                drawing_indicators = ['elevation', 'el ', 'drawing', 'scale', 'designed:', 'kitchen layout']
+                has_drawing = sum(indicator in text_lower for indicator in drawing_indicators)
+                
+                # Check for SKU patterns
+                sku_pattern = r'\b([WBSPFRLD][A-Z]*\d{2,4}(?:\s*BUTT?)?)\b'
+                skus_found = len(re.findall(sku_pattern, text, re.IGNORECASE))
+                
+                # Determine file type
+                if has_drawing > has_pricing and skus_found > 5:
+                    file_type = 'engineering_drawing'
+                elif has_pricing > has_drawing:
+                    file_type = 'pricing_sheet'
+                else:
+                    file_type = 'unknown'
+                
+                return jsonify({
+                    'success': True,
+                    'file_type': file_type,
+                    'indicators': {
+                        'pricing_score': has_pricing,
+                        'drawing_score': has_drawing,
+                        'skus_found': skus_found
+                    }
+                })
+                
+            except Exception as e:
+                return jsonify({'error': f'Failed to analyze PDF: {str(e)}'}), 500
+        
+        # Excel files are always pricing sheets
+        elif file_path.lower().endswith(('.xlsx', '.xls', '.csv')):
+            return jsonify({
+                'success': True,
+                'file_type': 'pricing_sheet'
+            })
+        
+        else:
+            return jsonify({
+                'success': True,
+                'file_type': 'unknown'
+            })
+            
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 
 # Error handlers

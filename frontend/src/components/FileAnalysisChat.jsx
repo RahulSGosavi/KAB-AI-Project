@@ -180,9 +180,55 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
 
   const isValidSKU = useCallback((sku) => {
     if (!sku || sku.length < 2) return false;
-    // Enhanced pattern to accept complex dimensional SKUs like W3612 X 24 DP BUT
-    const complexPattern = /^[WBSPFRLD][A-Z\d\s]*\d{2,6}|^[A-Z]{2,5}\d{2,6}/i;
-    return complexPattern.test(sku);
+    // FIXED: More flexible pattern to accept variations like W2442 BUTT, B36 1TD, etc.
+    const flexiblePattern = /^[A-Z]+\d+(?:\s+[A-Z]+)*(?:\s+BUTT)?(?:\s+\d+TD)?(?:\s+[LR])?/i;
+    return flexiblePattern.test(sku);
+  }, []);
+
+  // FIXED: Smart SKU normalization - handles BUTT suffix and variations
+  const normalizeQuerySku = useCallback((skuRaw) => {
+    if (!dataIndexRef.current) return skuRaw;
+    
+    let sku = String(skuRaw).trim().toUpperCase();
+    
+    // Try exact match first
+    if (dataIndexRef.current.has(sku)) return sku;
+    
+    // Try without BUTT suffix
+    const withoutButt = sku.replace(/\s+BUTT$/i, '').trim();
+    if (dataIndexRef.current.has(withoutButt)) return withoutButt;
+    
+    // Try with BUTT suffix
+    const withButt = `${withoutButt} BUTT`;
+    if (dataIndexRef.current.has(withButt)) return withButt;
+    
+    // Try with space variations (W2442 vs W 2442)
+    const withoutSpaces = sku.replace(/\s+/g, '');
+    if (dataIndexRef.current.has(withoutSpaces)) return withoutSpaces;
+    
+    return sku;
+  }, []);
+
+  // FIXED: Smart SKU suggestion system - finds similar SKUs when exact match fails
+  const findSimilarSKUs = useCallback((targetSku) => {
+    if (!dataIndexRef.current || dataIndexRef.current.size === 0) return [];
+    
+    const allSkus = Array.from(dataIndexRef.current.keys());
+    const baseTarget = targetSku.replace(/\s+BUTT$/i, '').replace(/\s+\d+TD$/i, '').trim();
+    
+    // Find by base pattern (W24 matches W2442, W2430, etc.)
+    const basePattern = baseTarget.match(/^([A-Z]+)(\d+)/i);
+    if (basePattern) {
+      const [, letters, numbers] = basePattern;
+      const similar = allSkus.filter(sku => {
+        const skuBase = sku.replace(/\s+BUTT$/i, '').replace(/\s+\d+TD$/i, '');
+        return skuBase.startsWith(letters.toUpperCase()) && skuBase.includes(numbers.slice(0, 2));
+      });
+      return similar.slice(0, 5);
+    }
+    
+    // If no pattern match, return first 5 SKUs as examples
+    return allSkus.slice(0, 5);
   }, []);
 
   const buildDataIndex = useCallback((parsedFiles) => {
@@ -520,20 +566,6 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
       throw new Error(`Failed to parse ${name}: ${error.message}`);
     }
   }, [parseExcelFile, parsePdfFile]);
-  
-  const normalizeQuerySku = useCallback((skuRaw) => {
-    let sku = String(skuRaw).trim().toUpperCase().replace(/\s+/g, ' ');
-    
-    // Remove generic cabinet descriptors ONLY, preserve dimensional/position modifiers
-    // Preserve: X 24 DP, BUT/BUTT, L/R, 1TD, 2DWR, etc.
-    sku = sku.replace(/\b(WALL|BASE|CABINET|DOOR|DRAWER|SHELF|UNIT)\b/g, '').trim();
-    
-    // Standardize BUT -> BUTT for consistency
-    sku = sku.replace(/\bBUT\b(?!T)/g, 'BUTT');
-    
-    // Clean up extra spaces
-    return sku.replace(/\s+/g, ' ').trim();
-  }, []);
 
   const findPricesForSKU = useCallback((sku) => {
     const index = dataIndexRef.current;
@@ -648,36 +680,40 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
         }
     }
     
-    // 2. Extract SKU for all other questions - ENHANCED REGEX FOR COMPLEX SKUs
-    // Catches: W3612 X 24 DP BUT, B36 1TD BUTT, SB33 BUTT, W2130L, WRH3024 RP, etc.
-    const skuMatch = question.match(/\b([WBSPFRLD][A-Z\d]*\d{2,4}(?:\s*X\s*\d{2}\s*DP)?(?:\s*\d{1}TD)?(?:\s*BUT{1,2})?(?:\s*[LR])?|[A-Z]{2,5}\d{2,4}(?:\s*[A-Z]{2,4})?|MI|APC|CCH|CCDW|CCSS|FDS|FE|ID|IF|PE|RD|VDO|VDM|VTD|VTK)\b/i);
+    // 2. FIXED: More flexible SKU extraction pattern
+    // Catches: W2442 BUTT, B36 1TD BUTT, SB33 BUTT, W2130L, etc.
+    const skuMatch = question.match(/\b([A-Z]+\d+(?:\s+[A-Z]+)*(?:\s+BUTT)?(?:\s+\d+TD)?(?:\s+[LR])?)\b/i);
 
     if (!skuMatch) {
+      const available = dataIndexRef.current ? Array.from(dataIndexRef.current.keys()).slice(0, 5) : [];
       return {
         success: false,
-        message: 'Please include a valid SKU code in your question.\nExamples: W1230, B24, W3630 BUTT, DB24 2DWR'
+        message: `Please include a valid SKU code in your question.\n\n${available.length > 0 ? `Available SKUs:\n${available.map(s => `• ${s}`).join('\n')}` : 'Examples: W1230, B24, W3630 BUTT, SB33 BUTT'}`
       };
     }
 
     const sku = skuMatch[1].trim();
-    const allPrices = findPricesForSKU(sku);
+    
+    // FIXED: Use smart normalization to find SKU variations
+    const normalizedSku = normalizeQuerySku(sku);
+    const allPrices = findPricesForSKU(normalizedSku);
 
     if (allPrices.length === 0) {
-      const index = dataIndexRef.current;
-      const availableSKUs = index ? Array.from(index.keys()).slice(0, 30) : [];
-      const baseSku = sku.split(' ')[0].trim().toUpperCase();
-      const allSKUs = index ? Array.from(index.keys()) : [];
-      const baseMatches = allSKUs.filter(s => s.startsWith(baseSku) && s.length > baseSku.length);
-
-      if (baseMatches.length > 0 && baseSku.length <= 4) {
+      // FIXED: Enhanced error messages with smart suggestions
+      const similar = findSimilarSKUs(sku);
+      
+      if (similar.length > 0) {
         return {
           success: false,
-          message: `SKU "${sku}" is ambiguous or missing a suffix.\n\nFound potential matches starting with "${baseSku}":\n${baseMatches.slice(0, 5).join(', ')}...\n\nPlease specify the full SKU (e.g., B24D or B24SB) and try again.`
+          message: `❌ SKU "${sku}" not found.\n\n💡 Did you mean one of these?\n${similar.map(s => `• ${s}`).join('\n')}\n\nPlease try again with the correct SKU.`
         };
       }
+      
+      // Show available SKUs if no similar matches
+      const available = dataIndexRef.current ? Array.from(dataIndexRef.current.keys()).slice(0, 10) : [];
       return {
         success: false,
-        message: `SKU "${sku}" not found in uploaded files.\n\nAvailable SKUs (sample):\n${availableSKUs.join(', ') || 'None'}\n\nPlease verify the SKU and try again.`
+        message: `❌ SKU "${sku}" not found in uploaded files.\n\n📋 Available SKUs:\n${available.map(s => `• ${s}`).join('\n')}\n\nPlease verify the SKU and try again.`
       };
     }
 
@@ -777,7 +813,7 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
       success: true,
       message: response
     };
-  }, [findPricesForSKU]);
+  }, [findPricesForSKU, normalizeQuerySku, findSimilarSKUs]);
 
 
   const handleSendMessage = useCallback(async () => {
