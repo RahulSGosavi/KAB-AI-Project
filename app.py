@@ -3,13 +3,14 @@ import os
 from dotenv import load_dotenv
 from flask import Flask, render_template, send_from_directory, jsonify, request, redirect
 from werkzeug.exceptions import RequestEntityTooLarge
-
-# --- NEW IMPORTS REQUIRED FOR ANALYSIS ---
+# --- NEW IMPORTS REQUIRED FOR DYNAMIC ANALYSIS ---
 import pandas as pd
 import numpy as np
 import re
 import traceback
-# ----------------------------------------
+import io
+import csv
+# ------------------------------------------------
 
 # load .env
 load_dotenv()
@@ -43,6 +44,24 @@ app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB
 
 # Ensure upload folder exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+
+# --- GLOBAL DATA STORE FOR ALL INDEXED FILES ---
+# This dictionary will store all processed DataFrames, keyed by filename.
+DATA_STORE = {}
+# -----------------------------------------------
+
+# The Material Map is now used for *natural language matching* and is dynamic
+# (Though some primary categories must be defined based on business knowledge)
+MATERIAL_MAP = {
+    'ELITE CHERRY': 'ELITE CHERRY',
+    'PREMIUM CHERRY': 'PREMIUM CHERRY',
+    'PRIME CHERRY': 'PRIME CHERRY',
+    'PRIME MAPLE': 'PRIME MAPLE',
+    'CHOICE': 'CHOICE',
+    'BASE': 'BASE',
+    'STANDARD': 'BASE',
+    'LOWEST': 'BASE'
+}
 
 # ---- Extensions import and init (expects extensions.py) --------------------
 try:
@@ -182,6 +201,157 @@ def health():
 @app.route('/api/test')
 def test():
     return {'message': 'App is running successfully!'}
+
+
+# ---------------------------
+# Dynamic Data Analysis Functions
+# ---------------------------
+
+def clean_and_index_data(file_content, filename):
+    """
+    Dynamically cleans and indexes the uploaded file content into the global DATA_STORE.
+    This function intelligently skips rows to find the correct header.
+    """
+    try:
+        sio = io.StringIO(file_content.decode('utf-8', errors='ignore'))
+        
+        # --- Dynamic Header Detection (Crucial for Flexibility) ---
+        # The specific files uploaded have non-standard headers, which we handle
+        header_row = 0
+        if 'SKU Pricing' in filename:
+            header_row = 1  # Price groups are on the second line (index 1)
+        elif 'Option Pricing' in filename:
+            header_row = 2  # Options start on the third line (index 2)
+        elif 'Accessory Pricing' in filename:
+            header_row = 3  # Accessories start on the fourth line (index 3)
+            
+        df = pd.read_csv(sio, header=header_row, skipinitialspace=True)
+        df = df.dropna(how='all', axis=0) # Drop completely empty rows
+
+        # --- Dynamic Column Normalization ---
+        # Find the primary identification column (SKU/CODE/ITEM)
+        id_col = next((col for col in df.columns if isinstance(col, str) and ('SKU' in col.upper() or 'CODE' in col.upper() or 'ITEM' in col.upper() or (len(df.columns) > 0 and col == df.columns[0]))), df.columns[0])
+        df = df.rename(columns={id_col: 'CODE'}).copy()
+        
+        # Clean the primary key column
+        df['CODE'] = df['CODE'].astype(str).str.strip().str.upper()
+        
+        # Store the processed data
+        DATA_STORE[filename] = {
+            'df': df,
+            'original_cols': df.columns.tolist()
+        }
+        return True
+    except Exception as e:
+        print(f"Error processing {filename}: {e}")
+        traceback.print_exc()
+        return False
+
+
+def extract_entities(question):
+    """
+    Extracts the SKU, Option Code, and Material/Price Group from a natural language query.
+    """
+    question = question.upper().strip()
+    
+    # --- 1. SKU/Option Code Pattern ---
+    # Catches common cabinet/accessory patterns: W1842, B36 1TD BUTT, W3612 X 24 DP BUT, WRH3024 RP, MI, APC
+    sku_pattern = r'([WBSPFRLD][A-Z\d\s]*\d{2,4}(\s?X\s?\d{2}\s?DP)?(\s?\d{1}TD)?(\s?BUTT)?(\s?[LR])?|[A-Z]{2,5}\s?\d{2,4}(\s?[A-Z]{2})?|MI|APC|CCH|CCDW|CCSS|FDS|FE|ID|IF|PE|RD|VDO|VDM|VTD|VTK)'
+    
+    sku_match = re.search(sku_pattern, question)
+    sku = sku_match.group(1).strip().replace(' CABINET', '') if sku_match else None
+
+    # --- 2. Material/Price Group Extraction ---
+    material = None
+    
+    for natural_name, keywords in MATERIAL_MAP.items():
+        # Check for the primary natural name or associated keywords (like 'LOWEST' -> 'BASE')
+        if any(kw in question for kw in (keywords if isinstance(keywords, list) else [keywords])):
+            material = natural_name
+            break
+            
+    # Correct SKU if an Option keyword was found but SKU was missed
+    if any(option in question for option in ['MATCHING INTERIOR', 'MI OPTION']) and not sku:
+        sku = 'MI'
+
+    return {'sku': sku, 'material': material}
+
+
+def get_dynamic_answer(question):
+    """Answers the question by querying the dynamic data store."""
+    entities = extract_entities(question)
+    sku = entities['sku']
+    material = entities['material']
+    
+    if not sku:
+        return "I could not identify a valid SKU or Option Code in your question. Please verify the code and try again."
+
+    # Search all files in the data store for the SKU
+    for filename, data in DATA_STORE.items():
+        df = data['df']
+        
+        # Look for a row matching the extracted SKU
+        sku_row = df[df['CODE'] == sku]
+
+        if not sku_row.empty:
+            prices = sku_row.iloc[0]
+            
+            # --- Scenario 1: Option Pricing (MI, APC, etc.) ---
+            if 'Option Pricing' in filename:
+                if 'PRICING' in prices and 'OPTION' in prices:
+                    pricing = prices['PRICING']
+                    option_name = prices['OPTION']
+                    return f"The pricing for the **{option_name} ({sku})** option is: **{pricing}**."
+            
+            # --- Scenario 2: Accessory Pricing ---
+            elif 'Accessory Pricing' in filename:
+                # Assuming 'List Price*' is the price column
+                price_col = next((col for col in df.columns if 'PRICE' in col.upper()), None)
+                if price_col and not pd.isna(prices[price_col]):
+                    price = prices[price_col]
+                    return f"The list price for the accessory **{sku}** is **${price:,.2f}**."
+
+            # --- Scenario 3: Main SKU Pricing ---
+            elif 'SKU Pricing' in filename:
+                # Dynamically find all numerical (price) columns
+                price_cols = [col for col in df.columns if col != 'CODE' and df[col].dtype in (np.number, object)]
+                
+                # Dynamic mapping of natural material names to the price columns
+                # This logic is what makes it dynamic for natural language
+                available_prices = {}
+                for col in price_cols:
+                    # Clean the column header for better display
+                    natural_name = col.split('\n')[0].strip() 
+                    if natural_name:
+                        available_prices[natural_name] = prices[col]
+
+                # Specific Material Requested
+                if material:
+                    # Find the column that best matches the requested material
+                    best_match_col = next((col for col in price_cols if material.upper() in col.upper()), None)
+                    if best_match_col and not pd.isna(prices[best_match_col]):
+                        price = prices[best_match_col]
+                        return f"The list price for **{sku}** in the **{material.title()}** material group is **${price:,.2f}**."
+
+                # Price Range Requested (Default)
+                clean_prices = [v for v in available_prices.values() if isinstance(v, (int, float))]
+                
+                if clean_prices:
+                    min_price = min(clean_prices)
+                    max_price = max(clean_prices)
+                    
+                    details = [f"- **{k}**: ${v:,.2f}" for k, v in available_prices.items() if isinstance(v, (int, float))]
+
+                    return (
+                        f"The price range for the **{sku}** cabinet spans from **${min_price:,.2f}** to **${max_price:,.2f}**.\n\n"
+                        f"**Material-Specific List Prices:**\n"
+                        f"{chr(10).join(details)}"
+                    )
+            
+            # Fallback if SKU was found but price data was incomplete
+            return f"Found **{sku}** in {filename}, but the price data is incomplete or improperly formatted."
+
+    return f"SKU **{sku}** not found in any of the uploaded pricing files."
 
 
 # ---------------------------
@@ -726,6 +896,132 @@ def analyze_files_route():
 # ---------------------------
 # END NEW ANALYSIS CODE
 # ---------------------------
+
+
+# ---------------------------
+# NEW DYNAMIC ANALYSIS API ENDPOINT
+# ---------------------------
+
+@app.route('/api/analyze', methods=['POST'])
+def analyze_question():
+    """
+    Main endpoint for dynamic pricing analysis using the DATA_STORE.
+    Expects JSON with 'question' and optionally 'file_ids' to index files.
+    """
+    try:
+        data = request.json
+        question = data.get('question', '')
+        file_ids = data.get('file_ids', [])
+        
+        # If file_ids are provided, index them first
+        if file_ids and not DATA_STORE:
+            for file_id in file_ids:
+                file_name = file_id.get('name') or file_id.get('filename') or str(file_id)
+                file_path = get_file_path_from_id(file_id)
+                
+                if os.path.exists(file_path):
+                    try:
+                        # Read file content
+                        with open(file_path, 'rb') as f:
+                            file_content = f.read()
+                        
+                        # Index the file
+                        clean_and_index_data(file_content, file_name)
+                    except Exception as e:
+                        app.logger.warning(f"Failed to index file {file_name}: {e}")
+        
+        # Check if DATA_STORE has data
+        if not DATA_STORE:
+            return jsonify({
+                'error': 'No indexed files found. Please ensure files are successfully uploaded and parsed.'
+            }), 400
+
+        # Generate dynamic answer
+        answer = get_dynamic_answer(question)
+        
+        return jsonify({
+            'answer': answer,
+            'source_files': list(DATA_STORE.keys()),
+            'success': True
+        })
+
+    except Exception as e:
+        print(f"Analysis error: {e}")
+        traceback.print_exc()
+        return jsonify({
+            'error': f"An unexpected error occurred during analysis: {str(e)}"
+        }), 500
+
+
+@app.route('/api/analyze/index-files', methods=['POST'])
+def index_files_endpoint():
+    """
+    Endpoint to manually trigger file indexing into DATA_STORE.
+    Useful for pre-indexing files before analysis.
+    """
+    try:
+        data = request.json
+        file_ids = data.get('file_ids', [])
+        
+        if not file_ids:
+            return jsonify({'error': 'No file IDs provided'}), 400
+        
+        indexed_files = []
+        failed_files = []
+        
+        for file_id in file_ids:
+            file_name = file_id.get('name') or file_id.get('filename') or str(file_id)
+            file_path = get_file_path_from_id(file_id)
+            
+            if not os.path.exists(file_path):
+                failed_files.append(file_name)
+                continue
+            
+            try:
+                # Read file content
+                with open(file_path, 'rb') as f:
+                    file_content = f.read()
+                
+                # Index the file
+                success = clean_and_index_data(file_content, file_name)
+                if success:
+                    indexed_files.append(file_name)
+                else:
+                    failed_files.append(file_name)
+            except Exception as e:
+                app.logger.error(f"Failed to index {file_name}: {e}")
+                failed_files.append(file_name)
+        
+        return jsonify({
+            'success': True,
+            'indexed_files': indexed_files,
+            'failed_files': failed_files,
+            'total_indexed': len(DATA_STORE)
+        })
+    
+    except Exception as e:
+        print(f"Indexing error: {e}")
+        traceback.print_exc()
+        return jsonify({
+            'error': f"Failed to index files: {str(e)}"
+        }), 500
+
+
+@app.route('/api/analyze/clear-cache', methods=['POST'])
+def clear_data_store():
+    """
+    Clears the DATA_STORE cache. Useful for testing or resetting the analysis state.
+    """
+    try:
+        DATA_STORE.clear()
+        return jsonify({
+            'success': True,
+            'message': 'Data store cleared successfully'
+        })
+    except Exception as e:
+        return jsonify({
+            'error': f"Failed to clear data store: {str(e)}"
+        }), 500
 
 
 # Error handlers
