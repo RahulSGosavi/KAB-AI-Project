@@ -28,9 +28,19 @@ export default defineConfig({
           'xlsx-vendor': ['xlsx']
         }
       }
-    }
+    },
+    assetsInlineLimit: 0 // Disable asset inlining to ensure worker files are separate
   },
   optimizeDeps: {
-    include: ['pdfjs-dist', 'xlsx', 'axios']
+    include: ['pdfjs-dist', 'xlsx', 'axios'],
+    exclude: ['pdfjs-dist/build/pdf.worker.min.mjs']
+  },
+  worker: {
+    format: 'es',
+    rollupOptions: {
+      output: {
+        entryFileNames: 'assets/[name]-[hash].js'
+      }
+    }
   }
 })

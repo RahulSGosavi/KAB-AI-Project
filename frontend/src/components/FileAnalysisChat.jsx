@@ -6,7 +6,8 @@ import * as XLSX from 'xlsx';
 import * as pdfjsLib from 'pdfjs-dist';
 
 // IMPORTANT: Set PDF worker source (required for PDF processing)
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// Use unpkg.com CDN which is more reliable than cdnjs for ES modules
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
 const CONFIG = {
   MAX_EXCEL_ROWS: 50000,
@@ -579,18 +580,36 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
       };
     }
 
-    // 3. Handle Single Material Price Query (e.g., PRIME MAPLE)
+    // 3. Handle Single Material Price Query (e.g., PRIME MAPLE, ELITE CHERRY)
     const materialMatch = question.match(/\b(elite cherry|elite maple|elite painted|elite duraform|premium cherry|premium maple|premium painted|premium duraform|prime cherry|prime maple|prime painted|prime duraform|choice cherry|choice maple|choice painted|choice duraform|base|standard)\b/i);
     
     if (materialMatch) {
       const searchMaterial = materialMatch[1].toLowerCase();
       
-      let match = allPrices.find(p => p.material.toLowerCase().includes(searchMaterial));
+      // Enhanced matching: Try exact match first, then partial match
+      // Priority 1: Exact material name match (case-insensitive)
+      let match = allPrices.find(p => p.material.toLowerCase() === searchMaterial);
+      
+      // Priority 2: Material that starts with the search term (e.g., "ELITE CHERRY" in "ELITE CHERRY / ELITE DURAFORM")
+      if (!match) {
+        match = allPrices.find(p => p.material.toLowerCase().startsWith(searchMaterial));
+      }
+      
+      // Priority 3: Material that contains the search term anywhere
+      if (!match) {
+        match = allPrices.find(p => p.material.toLowerCase().includes(searchMaterial));
+      }
 
       if (match) {
+        // Format the response based on whether it's a compound material name
+        const isCompoundMaterial = match.material.includes('/');
+        const materialDescription = isCompoundMaterial 
+          ? `the **${match.material}** material tier` 
+          : `**${match.material}**`;
+        
         return {
           success: true,
-          message: `✓ PRICING ANALYSIS\n\nThe price for **${match.sku}** in the **${match.material}** option is:\n\n**$${match.price.toFixed(2)}**\n\n📍 Source: ${match.source}`
+          message: `✓ PRICING ANALYSIS\n\nThe list price for the **${match.sku}** cabinet under ${materialDescription} is:\n\n**$${match.price.toFixed(2)}**\n\n📍 Source: ${match.source}`
         };
       } else {
         const availableMaterials = [...new Set(allPrices.map(p => p.material))];
