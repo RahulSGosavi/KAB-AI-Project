@@ -189,14 +189,37 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
   const buildDataIndex = useCallback((parsedFiles) => {
     const index = new Map();
     let totalRowsProcessed = 0;
+    let skusRejected = 0;
+    let skusAccepted = 0;
 
-    if (!Array.isArray(parsedFiles)) return index;
+    console.log(`\n🔨 Building data index from ${parsedFiles.length} file(s)...`);
+
+    if (!Array.isArray(parsedFiles)) {
+      console.error('⚠️ parsedFiles is not an array');
+      return index;
+    }
 
     parsedFiles.forEach(file => {
-      if (!file?.sheets || !Array.isArray(file.sheets)) return;
+      console.log(`\n📁 Processing file: ${file.filename}`);
+      
+      if (!file?.sheets || !Array.isArray(file.sheets)) {
+        console.error(`  ⚠️ No sheets found in file`);
+        return;
+      }
+
+      console.log(`  Found ${file.sheets.length} sheet(s)`);
 
       file.sheets.forEach(sheet => {
-        if (!sheet?.rows || !Array.isArray(sheet.rows)) return;
+        console.log(`\n  📊 Sheet: ${sheet.originalName || sheet.name}`);
+        
+        if (!sheet?.rows || !Array.isArray(sheet.rows)) {
+          console.error(`    ⚠️ No rows in sheet`);
+          return;
+        }
+
+        console.log(`    Rows: ${sheet.rows.length}`);
+        console.log(`    Headers: ${sheet.rawHeaders?.slice(0, 5).join(', ')}...`);
+        console.log(`    First 3 SKUs: ${sheet.rows.slice(0, 3).map(r => r.cells[0]).join(', ')}`);
 
         sheet.rows.forEach(row => {
           if (!row?.cells || !Array.isArray(row.cells) || row.cells.length === 0) return;
@@ -227,9 +250,17 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
           const sku = safeToUpperCase(skuRaw); 
           if (!sku || sku.length < 2) return;
 
-          // Only index SKUs that pass the format test
-          if (!isValidSKU(sku)) return;
+          // More lenient SKU validation - accept anything that looks like a cabinet code
+          const isValid = isValidSKU(sku);
+          if (!isValid) {
+            skusRejected++;
+            if (skusRejected <= 5) {
+              console.log(`    ❌ Rejected SKU: "${sku}"`);
+            }
+            return;
+          }
 
+          skusAccepted++;
           if (!index.has(sku)) {
             index.set(sku, []);
           }
@@ -244,8 +275,17 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
             fileName: file.filename || 'Unknown'
           });
         });
+
+        console.log(`    ✅ Indexed ${skusAccepted} SKUs from this sheet`);
       });
     });
+    
+    console.log(`\n✅ INDEX COMPLETE:`);
+    console.log(`  - Total rows processed: ${totalRowsProcessed}`);
+    console.log(`  - SKUs accepted: ${skusAccepted}`);
+    console.log(`  - SKUs rejected: ${skusRejected}`);
+    console.log(`  - Unique SKUs in index: ${index.size}`);
+    console.log(`  - Sample SKUs: ${Array.from(index.keys()).slice(0, 10).join(', ')}`);
     
     return index;
   }, [safeToUpperCase, isValidSKU]);
@@ -349,10 +389,12 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
 
   const parsePdfFile = useCallback(async (arrayBuffer, filename) => {
     try {
+      console.log(`📄 Parsing PDF: ${filename}`);
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      const allText = [];
       const pagesToProcess = Math.min(pdf.numPages, CONFIG.MAX_PDF_PAGES);
-
+      
+      // Extract all text from PDF pages
+      const allText = [];
       for (let i = 1; i <= pagesToProcess; i++) {
         setProgress(Math.round((i / pagesToProcess) * 50));
         const page = await pdf.getPage(i);
@@ -368,9 +410,51 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
         }
       }
 
+      const fullText = allText.join('\n\n');
+      console.log(`📄 Extracted ${fullText.length} characters from PDF`);
+
+      // Try to parse structured data from PDF text (like table data)
+      const lines = fullText.split('\n');
+      const rows = [];
+      const skuPattern = /\b([WBSPFRLD][A-Z\d]*\d{2,4}(?:\s*X\s*\d{2}\s*DP)?(?:\s*\d{1}TD)?(?:\s*BUT{1,2})?(?:\s*[LR])?|[A-Z]{2,5}\d{2,4})\b/gi;
+      
+      // Find lines that contain SKUs and extract data
+      lines.forEach((line, idx) => {
+        const skuMatches = line.match(skuPattern);
+        if (skuMatches && skuMatches.length > 0) {
+          // Extract numbers that might be prices
+          const numbers = line.match(/\$?\s*(\d{2,5}(?:\.\d{2})?)/g) || [];
+          const prices = numbers.map(n => parseFloat(n.replace(/[^0-9.]/g, '')));
+          
+          const sku = skuMatches[0].trim();
+          
+          // Create a simple row structure
+          const cells = [sku, ...prices.map(p => p.toString())];
+          
+          if (prices.length > 0) {
+            rows.push({
+              rowIndex: idx + 1,
+              cells
+            });
+          }
+        }
+      });
+
+      console.log(`📊 Extracted ${rows.length} data rows from PDF`);
+      
+      // Return in same format as Excel for compatibility
       return {
         filename,
-        text: allText.join('\n\n'),
+        sheets: [{
+          name: 'pdfdata',
+          originalName: 'PDF Data',
+          headers: ['sku', 'price1', 'price2', 'price3', 'price4', 'price5'],
+          rawHeaders: ['SKU', 'Price 1', 'Price 2', 'Price 3', 'Price 4', 'Price 5'],
+          rows,
+          rowCount: rows.length
+        }],
+        totalRows: rows.length,
+        text: fullText,
         pages: pdf.numPages,
         isPDF: true
       };
@@ -378,6 +462,8 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
       console.error('PDF parse error:', err);
       return {
         filename,
+        sheets: [],
+        totalRows: 0,
         text: '',
         pages: 0,
         error: err.message,
@@ -758,43 +844,46 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
       return;
     }
     
-    // Pre-parse and index files when starting analysis
-    addMessage(`🔄 Starting analysis with ${selectedFiles.length} file(s). Please wait while I parse the data...`, MESSAGE_TYPES.SYSTEM);
+    addMessage(`🔄 Loading ${selectedFiles.length} file(s) into memory...`, MESSAGE_TYPES.SYSTEM);
     setShowSelector(false);
     setStatus(STATUS.PARSING);
     
     try {
-      let parsedFiles = [];
+      let allData = [];
+      
       for (const file of selectedFiles) {
         const cacheKey = file.name || file.filename || JSON.stringify(file);
 
         if (parsedCache[cacheKey]) {
-          console.log(`Using cached file: ${cacheKey}`);
-          parsedFiles.push(parsedCache[cacheKey]);
+          console.log(`✅ Using cached: ${cacheKey}`);
+          allData.push(parsedCache[cacheKey]);
         } else {
+          console.log(`📥 Parsing: ${file.name || file.filename}`);
           const parsed = await parseFile(file);
-          parsedFiles.push(parsed);
+          allData.push(parsed);
           setParsedCache(prev => ({ ...prev, [cacheKey]: parsed }));
         }
       }
 
+      // Simple indexing - just store all the data
       setStatus(STATUS.INDEXING);
-      const index = buildDataIndex(parsedFiles);
+      const index = buildDataIndex(allData);
       dataIndexRef.current = index;
       
-      const skuCount = index.size;
-      const totalEntries = Array.from(index.values()).flat().length;
+      console.log(`📊 Total SKUs indexed: ${index.size}`);
+      console.log(`📋 Sample SKUs:`, Array.from(index.keys()).slice(0, 20));
       
-      if (skuCount === 0) {
-        addMessage(`⚠️ Warning: No SKU data found in the files. Please ensure your files contain SKU codes in the first column.`, MESSAGE_TYPES.ERROR);
+      if (index.size === 0) {
+        addMessage(`⚠️ No SKU data found. Check console (F12) for details.\n\nMake sure your Excel file has:\n- SKU codes in the first column\n- Price data in other columns`, MESSAGE_TYPES.ERROR);
+        console.error('❌ No data indexed. Check file structure.');
       } else {
-        addMessage(`✅ Analysis ready! Indexed ${skuCount} unique SKUs with ${totalEntries} price entries. You can now ask questions.`, MESSAGE_TYPES.SYSTEM);
+        addMessage(`✅ Ready! Loaded ${index.size} SKUs from your files.\n\nYou can now ask questions like:\n- "What is the price of W1842?"\n- "What is W3630 BUTT in Elite Cherry?"`, MESSAGE_TYPES.SYSTEM);
       }
       
       setStatus(STATUS.IDLE);
     } catch (err) {
-      console.error('Pre-indexing error:', err);
-      addMessage(`❌ Error preparing files: ${err.message}`, MESSAGE_TYPES.ERROR);
+      console.error('❌ Error:', err);
+      addMessage(`❌ Error: ${err.message}\n\nCheck console (F12) for details.`, MESSAGE_TYPES.ERROR);
       setStatus(STATUS.ERROR);
     }
   }, [selectedFiles, addMessage, parsedCache, parseFile, buildDataIndex]);
