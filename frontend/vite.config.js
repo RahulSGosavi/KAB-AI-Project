@@ -16,5 +16,21 @@ export default defineConfig({
         changeOrigin: true,
       }
     }
+  },
+  build: {
+    minify: 'esbuild',
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'pdf-vendor': ['pdfjs-dist'],
+          'xlsx-vendor': ['xlsx']
+        }
+      }
+    }
+  },
+  optimizeDeps: {
+    include: ['pdfjs-dist', 'xlsx', 'axios']
   }
 })
