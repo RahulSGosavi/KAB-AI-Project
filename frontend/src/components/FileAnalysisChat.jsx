@@ -164,20 +164,25 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
   }, []);
 
   const splitQuestions = useCallback((text) => {
-    // Split by ? or newline, and only keep questions that look like they contain a SKU
+    // Split by ? or newline, and only keep questions that contain a SKU or option code
     const questions = text
       .split(/[?]|\n/)
       .map(q => q.trim())
-      .filter(q => q.length > 10 || q.toLowerCase().includes('mi option')) // Keep short option questions
-      .filter(q => /\b([A-Z]{1,4}\d{2,6}(?:\s+[A-Z]+)?\b|mi option)/i.test(q)); // Ensure SKU or MI option is present
+      .filter(q => q.length > 5 || q.toLowerCase().includes('mi option')) // Keep short option questions
+      .filter(q => {
+        // Enhanced SKU detection pattern - matches complex dimensional SKUs
+        const hasComplexSKU = /\b([WBSPFRLD][A-Z\d]*\d{2,4}(?:\s*X\s*\d{2}\s*DP)?(?:\s*\d{1}TD)?(?:\s*BUT{1,2})?(?:\s*[LR])?|[A-Z]{2,5}\d{2,4}|mi option|mi)\b/i.test(q);
+        return hasComplexSKU;
+      });
     
     return questions.length > 0 ? questions : [text];
   }, []);
 
   const isValidSKU = useCallback((sku) => {
     if (!sku || sku.length < 2) return false;
-    const relaxedPattern = /^[A-Z]{1,4}\d{2,6}/i;
-    return relaxedPattern.test(sku);
+    // Enhanced pattern to accept complex dimensional SKUs like W3612 X 24 DP BUT
+    const complexPattern = /^[WBSPFRLD][A-Z\d\s]*\d{2,6}|^[A-Z]{2,5}\d{2,6}/i;
+    return complexPattern.test(sku);
   }, []);
 
   const buildDataIndex = useCallback((parsedFiles) => {
@@ -416,9 +421,16 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
   
   const normalizeQuerySku = useCallback((skuRaw) => {
     let sku = String(skuRaw).trim().toUpperCase().replace(/\s+/g, ' ');
-    // Remove general cabinet descriptors from the SKU for better matching
-    sku = sku.replace(/\b(WALL|BASE|CABINET|DOOR|DRAWER|SHELF|UNIT|SR|SD)\b/g, '').trim(); 
-    return sku.replace(/\s+/g, ' ');
+    
+    // Remove generic cabinet descriptors ONLY, preserve dimensional/position modifiers
+    // Preserve: X 24 DP, BUT/BUTT, L/R, 1TD, 2DWR, etc.
+    sku = sku.replace(/\b(WALL|BASE|CABINET|DOOR|DRAWER|SHELF|UNIT)\b/g, '').trim();
+    
+    // Standardize BUT -> BUTT for consistency
+    sku = sku.replace(/\bBUT\b(?!T)/g, 'BUTT');
+    
+    // Clean up extra spaces
+    return sku.replace(/\s+/g, ' ').trim();
   }, []);
 
   const findPricesForSKU = useCallback((sku) => {
@@ -431,14 +443,28 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
     let rows = index.get(normalizedQuerySku);
 
     if (!rows || rows.length === 0) {
-      // Try partial matching if exact SKU fails
+      // Try partial matching if exact SKU fails - Enhanced for dimensional SKUs
       const allSKUs = Array.from(index.keys());
       const partialMatches = allSKUs.filter(s => {
+        // Extract base SKU code (e.g., W3612 from W3612 X 24 DP BUT)
         const sBase = s.split(' ')[0];
         const queryBase = normalizedQuerySku.split(' ')[0];
-        if (sBase === queryBase) return true; 
+        
+        // Match 1: Base SKU codes match (handles dimensional variations)
+        if (sBase === queryBase) return true;
+        
+        // Match 2: Exact start match
         if (s.startsWith(normalizedQuerySku)) return true;
-        if (s === `${normalizedQuerySku} BUTT`) return true;
+        
+        // Match 3: Query starts with indexed SKU (reverse match)
+        if (normalizedQuerySku.startsWith(s)) return true;
+        
+        // Match 4: BUTT variation handling
+        if (s === `${normalizedQuerySku} BUTT` || s === normalizedQuerySku.replace(' BUT', ' BUTT')) return true;
+        
+        // Match 5: Remove all spaces and compare (handles spacing variations)
+        if (s.replace(/\s+/g, '') === normalizedQuerySku.replace(/\s+/g, '')) return true;
+        
         return false;
       });
 
@@ -520,8 +546,9 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
         }
     }
     
-    // 2. Extract SKU for all other questions
-    const skuMatch = question.match(/\b([A-Z]{1,4}\d{2,6}(?:\s*[A-Z]{1,4})*(?:\s*[A-Z]{2,4})?)\b/i);
+    // 2. Extract SKU for all other questions - ENHANCED REGEX FOR COMPLEX SKUs
+    // Catches: W3612 X 24 DP BUT, B36 1TD BUTT, SB33 BUTT, W2130L, WRH3024 RP, etc.
+    const skuMatch = question.match(/\b([WBSPFRLD][A-Z\d]*\d{2,4}(?:\s*X\s*\d{2}\s*DP)?(?:\s*\d{1}TD)?(?:\s*BUT{1,2})?(?:\s*[LR])?|[A-Z]{2,5}\d{2,4}(?:\s*[A-Z]{2,4})?|MI|APC|CCH|CCDW|CCSS|FDS|FE|ID|IF|PE|RD|VDO|VDM|VTD|VTK)\b/i);
 
     if (!skuMatch) {
       return {
