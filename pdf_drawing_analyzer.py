@@ -41,8 +41,8 @@ class DrawingElement:
 class PDFDrawingAnalyzer:
     """Intelligent PDF Drawing Analyzer"""
     
-    # Enhanced SKU patterns for cabinet codes
-    SKU_PATTERN = r'\b([WBSPFRLD][A-Z]*\d{2,4}(?:\s*\d+TD)?(?:\s*BUTT?)?(?:\s*[LR])?|SB\d{2}(?:\s*BUTT)?)\b'
+    # Precise SKU patterns for cabinet codes - only matches actual SKU codes
+    SKU_PATTERN = r'\b([WBSPFRLD][A-Z]*\d{2,4}(?:\s+(?:X\s+\d{2}\s+DP|BUTT?|[LR]|\d+TD))*|SB\d{2}(?:\s+BUTT)?)\b'
     
     # Dimension patterns (e.g., 108", 31 1/2", 2'-6")
     DIMENSION_PATTERN = r'(\d+(?:\s*\d+/\d+)?(?:"|\'|mm|cm|ft|\s*1/[248]))'

@@ -170,9 +170,9 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
       .map(q => q.trim())
       .filter(q => q.length > 5 || q.toLowerCase().includes('mi option')) // Keep short option questions
       .filter(q => {
-        // Enhanced SKU detection pattern - matches complex dimensional SKUs
-        const hasComplexSKU = /\b([WBSPFRLD][A-Z\d]*\d{2,4}(?:\s*X\s*\d{2}\s*DP)?(?:\s*\d{1}TD)?(?:\s*BUT{1,2})?(?:\s*[LR])?|[A-Z]{2,5}\d{2,4}|mi option|mi)\b/i.test(q);
-        return hasComplexSKU;
+        // FIXED: Precise SKU detection - only matches actual SKU codes
+        const hasSKU = /\b([WBSPFRLD][A-Z]*\d{2,4}(?:\s+(?:X\s+\d{2}\s+DP|BUTT?|[LR]|\d+TD))*|mi option|mi)\b/i.test(q);
+        return hasSKU;
       });
     
     return questions.length > 0 ? questions : [text];
@@ -180,9 +180,9 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
 
   const isValidSKU = useCallback((sku) => {
     if (!sku || sku.length < 2) return false;
-    // FIXED: More flexible pattern to accept variations like W2442 BUTT, B36 1TD, etc.
-    const flexiblePattern = /^[A-Z]+\d+(?:\s+[A-Z]+)*(?:\s+BUTT)?(?:\s+\d+TD)?(?:\s+[LR])?/i;
-    return flexiblePattern.test(sku);
+    // FIXED: Precise pattern - only accepts actual SKU codes with valid modifiers
+    const precisePattern = /^[WBSPFRLD][A-Z]*\d{2,4}(?:\s+(?:X\s+\d{2}\s+DP|BUTT?|[LR]|\d+TD))*$/i;
+    return precisePattern.test(sku);
   }, []);
 
   // FIXED: Smart SKU normalization - handles BUTT suffix and variations
@@ -680,9 +680,10 @@ const FileAnalysisChat = ({ isOpen, onClose, projectFiles = [] }) => {
         }
     }
     
-    // 2. FIXED: More flexible SKU extraction pattern
-    // Catches: W2442 BUTT, B36 1TD BUTT, SB33 BUTT, W2130L, etc.
-    const skuMatch = question.match(/\b([A-Z]+\d+(?:\s+[A-Z]+)*(?:\s+BUTT)?(?:\s+\d+TD)?(?:\s+[LR])?)\b/i);
+    // 2. FIXED: Precise SKU extraction - only captures actual SKU codes, not surrounding text
+    // Matches: W1842, W2442 BUTT, B36 1TD, SB33 BUTT, W2130L, W3612 X 24 DP, etc.
+    // Does NOT match generic words like "wall", "cabinet", "material", etc.
+    const skuMatch = question.match(/\b([WBSPFRLD][A-Z]*\d{2,4}(?:\s+(?:X\s+\d{2}\s+DP|BUTT?|[LR]|\d+TD))*)\b/i);
 
     if (!skuMatch) {
       const available = dataIndexRef.current ? Array.from(dataIndexRef.current.keys()).slice(0, 5) : [];
